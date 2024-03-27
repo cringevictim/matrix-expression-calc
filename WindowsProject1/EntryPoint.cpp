@@ -4,6 +4,9 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <exception>
+#include <cwchar>
+#include <iostream>
 
 #include "Parser.h"
 //#include "Matrix.h"
@@ -61,6 +64,22 @@ std::wstring matrixToString(const std::vector<std::vector<int>>& matrix) {
     return ss.str();
 }
 
+std::wstring eToWString(const std::exception& e) {
+    const char* message = e.what();
+    size_t length = std::strlen(message) + 1;  // +1 for the null terminator
+
+    // Prepare a wide string buffer
+    std::wstring wmessage(length, L'\0');  // Initialize with null characters
+
+    // Convert to wide string safely
+    size_t convertedChars = 0;
+    mbstowcs_s(&convertedChars, &wmessage[0], length, message, _TRUNCATE);
+
+    // Resize the wstring to the actual converted length
+    wmessage.resize(convertedChars - 1);  // -1 to exclude the null terminator
+
+    return wmessage;
+}
 
 // Window procedure function implementation
 LRESULT CALLBACK WindowProcedure(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -88,32 +107,40 @@ LRESULT CALLBACK WindowProcedure(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
             MessageBoxW(hWnd, L"Довідкова інформація", L"Довідка", MB_OK);
             break;
         case BUTTON_CALCULATE_MATRIX: {
-            // Get the length of the text in TEXTBOX_MATRIX to allocate buffer.
             int len = GetWindowTextLength(GetDlgItem(hWnd, TEXTBOX_MATRIX)) + 1;
             // Allocate buffer to hold text.
             wchar_t* text = new wchar_t[len];
             // Retrieve text from TEXTBOX_MATRIX.
             GetWindowText(GetDlgItem(hWnd, TEXTBOX_MATRIX), text, len);
-            // Convert from wide char to narrow char array
-            char ch[256];
+
+            // Convert from wide char to narrow char array dynamically
+            int narrowLen = WideCharToMultiByte(CP_ACP, 0, text, -1, nullptr, 0, nullptr, nullptr); // Get the length required for narrow characters
+            char* ch = new char[narrowLen]; // Dynamically allocate buffer based on required length
             char DefChar = ' ';
-            WideCharToMultiByte(CP_ACP, 0, text, -1, ch, 260, &DefChar, NULL);
+            WideCharToMultiByte(CP_ACP, 0, text, -1, ch, narrowLen, &DefChar, NULL);
+
             // Convert char array to string
             std::string matrixStr(ch);
-            // Free text buffer.
+            matrixStr.push_back(' ');
+            // Free text and ch buffers.
             delete[] text;
+            delete[] ch;
             try {
                 //[[1,2,3],[4,5,6],[7,8,9]]
                 //([[1,2,3],[4,5,6],[7,8,9]]+[[1,2,3],[4,5,6],[7,8,9]])*[[1,2,3],[4,5,6],[7,8,9]]
-
+                //[[3,2,3],[4,5,6],[7,8,9]]+[[1,2,3],[4,5,6],[7,8,9]]+[[1,2,3],[4,5,6],[7,8,9]] 
                 //
+                //matrixStr = "[[1,2,3],[4,5,6],[7,8,9]]-[[1,2,3],[4,5,6],[7,8,9]] ";
+                matrixStr = "[[1,2],[1,2]]-[[1,12],[-1,12]] ";
                 Matrix result = evaluateMatrixExpression(matrixStr);
                 std::string result_str = matrixToString(result);
                 std::wstring matrixString = std::wstring(result_str.begin(), result_str.end()); // Конвертуємо матрицю до рядка
-                MessageBoxW(hWnd, matrixString.c_str(), L"Матриця", MB_OK); // Виводимо матрицю у вікні повідомлення
+                MessageBoxW(hWnd, matrixString.c_str(), L"Result", MB_OK); // Виводимо матрицю у вікні повідомлення
             }
             catch (const std::exception& e) {
-                MessageBoxW(hWnd, L"Failed", L"Error", MB_OK);
+                std::wstring wmessage = eToWString(e);
+
+                MessageBoxW(hWnd, wmessage.c_str(), L"Error", MB_OK);
             }
         }
         }

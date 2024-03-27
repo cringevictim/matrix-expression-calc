@@ -39,7 +39,7 @@ std::string matrixToString(const Matrix& matrix) {
     return ss.str();
 }
 
-Matrix parseMatrix(const std::string& str) { 
+Matrix stringToMatrix(const std::string& str) {
     // Check for empty string
     if (str.empty()) {
         throw std::invalid_argument("Input string is empty");
@@ -60,21 +60,32 @@ Matrix parseMatrix(const std::string& str) {
     while (std::getline(ss, row, ']')) {
         // Remove any leading '[' or ',' from the row
         row.erase(std::remove(row.begin(), row.end(), '['), row.end());
-        row.erase(std::remove(row.begin(), row.end(), ','), row.end());
+        //row.erase(std::remove(row.begin(), row.end(), ','), row.end()); // Прибирає коми, закоментувати і в циклі розібрати строку 1,2,3 на вектор
 
         if (row.empty()) continue; // Skip empty rows, if any
 
         std::istringstream rowStream(row);
-        std::string value;
+        
         std::vector<int> matrixRow;
+        
+        
 
-        while (std::getline(rowStream, value, ',')) {
-            // Check for invalid characters
-            if (!std::all_of(value.begin(), value.end(), [](char c) { return std::isdigit(c) || c == '-'; })) {
-                throw std::invalid_argument("Invalid character in matrix");
+        std::stringstream ss(row);
+        std::string item;
+
+        while (std::getline(ss, item, ',')) { // Використовуємо кому як роздільник
+            try {
+                // Спробувати конвертувати строку в число і додати у вектор
+                matrixRow.push_back(std::stoi(item));
             }
-
-            matrixRow.push_back(std::stoi(value));
+            catch (const std::invalid_argument& e) {
+                // Якщо конвертація не вдалася, можна або ігнорувати це число, або обробити помилку
+                // Тут просто ігноруємо
+            }
+            catch (const std::out_of_range& e) {
+                // Якщо число занадто велике для int, можна або ігнорувати, або обробити помилку
+                // Тут просто ігноруємо
+            }
         }
 
         // Check if all rows have the same number of elements
@@ -91,15 +102,17 @@ Matrix parseMatrix(const std::string& str) {
     return result;
 }
 
+
+
 Token matrixOperation(const Token& left, const Token& op, const Token& right) {
     if (op.value == "+") {
-        return Token{ TokenType::Number, matrixToString(parseMatrix(left.value) + parseMatrix(right.value)) }; // Використання перевантаженого оператора '+' для додавання матриць
+        return Token{ TokenType::Number, matrixToString(stringToMatrix(left.value) + stringToMatrix(right.value)) }; // Використання перевантаженого оператора '+' для додавання матриць
     }
     else if (op.value == "*") {
-        return Token{ TokenType::Number, matrixToString(parseMatrix(left.value) * parseMatrix(right.value)) }; // Використання перевантаженого оператора '*' для множення матриць
+        return Token{ TokenType::Number, matrixToString(stringToMatrix(left.value) * stringToMatrix(right.value)) }; // Використання перевантаженого оператора '*' для множення матриць
     }
     else if (op.value == "-") {
-        return Token{ TokenType::Number, matrixToString(parseMatrix(left.value) - parseMatrix(right.value)) };
+        return Token{ TokenType::Number, matrixToString(stringToMatrix(left.value) - stringToMatrix(right.value)) };
     }
     else if (op.value == "-") {
 
@@ -124,19 +137,18 @@ std::vector<Token> tokenize(const std::string& input) {
         if (std::isdigit(c) || c == '-' || c == '[' || c == ']') {
             // Це початок матриці або числа
             std::string number(1, c);
-            while (stream.peek() != '+' && stream.peek() != '*' && !std::isspace(stream.peek())) {
+            while (stream.peek() != '+' && stream.peek() != '*' && stream.peek() != '-' && !std::isspace(stream.peek())) {
                 stream >> c;
                 number += c;
             }
             Token tmp = { TokenType::Number, number };
             tokens.push_back(tmp);
         }
-        else if (c == '+' || c == '*') {
+        else if (c == '+' || c == '*' || c == '-') {
             Token tmp = { TokenType::Operator, std::string(1, c )};
             tokens.push_back(tmp);
         }
-        else if (
-            c == '(') {
+        else if (c == '(') {
             Token tmp = { TokenType::LeftParen, "(" };
             tokens.push_back(tmp);
         }
@@ -234,26 +246,16 @@ Token parseExpression(const std::vector<Token>& tokens) {
 Matrix evaluateAST(const Token& astRoot) {
     // Якщо це "число" (матриця), то просто повертаємо його
     if (astRoot.typeT == TokenType::Number) {
-        return parseMatrix(astRoot.value);
+        return stringToMatrix(astRoot.value);
     }
-
-    // Якщо це оператор, потрібно виконати відповідну операцію
-    // Оскільки ми не маємо прямого доступу до дочірніх вузлів, ми не можемо викликати evaluateAST для дочірніх елементів тут.
-    // Однак, ваш parseExpression вже виконує обчислення і повертає результат, тому цей випадок може не знадобитися.
-
-    // У випадку невизначеності повертаємо порожню матрицю або генеруємо помилку
     throw std::runtime_error("Невідомий тип вузла в AST");
 }
 
 Matrix evaluateMatrixExpression(const std::string& expression) {
-    // Перетворення виразу у список токенів
     std::vector<Token> tokens = tokenize(expression);
 
-    // Парсинг виразу та побудова абстрактного синтаксичного дерева (AST)
     Token astRoot = parseExpression(tokens);
 
-    // Функція для оцінки AST та отримання кінцевого результату
-    // Потрібна реалізація функції evaluateAST, яка пройде по AST і обчислить результат
     Matrix result = evaluateAST(astRoot);
 
     return result;
